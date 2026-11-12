@@ -1,0 +1,1450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TERRA//PRIME — Country & City Interactive Recon Globe</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --primary: #00f0ff;
+      --accent: #0077ff;
+      --gold: #ffcc33;
+      --emerald: #00ffaa;
+      --bg: #010307;
+      --panel-bg: rgba(6, 14, 26, 0.80);
+      --border: rgba(0, 240, 255, 0.28);
+      --font-display: 'Chakra Petch', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      overflow: hidden;
+      color: #e6f6ff;
+      font-family: var(--font-mono);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    #webgl-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    .vignette {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 4;
+      background: radial-gradient(circle at center, transparent 58%, rgba(0, 2, 8, 0.82) 100%);
+    }
+
+    /* HUD Panels */
+    .hud {
+      position: fixed;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .glass-panel {
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.65), inset 0 0 20px rgba(0, 240, 255, 0.06);
+      padding: 16px 20px;
+      border-radius: 8px;
+    }
+
+    #header {
+      top: 22px; left: 22px;
+      min-width: 300px;
+    }
+    #header h1 {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      color: #fff;
+      text-shadow: 0 0 14px rgba(0, 240, 255, 0.6);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .status-dot {
+      width: 9px; height: 9px;
+      background: var(--primary);
+      box-shadow: 0 0 10px var(--primary);
+      border-radius: 50%;
+    }
+    .hud-meta {
+      margin-top: 10px;
+      font-size: 11.5px;
+      line-height: 1.85;
+      color: #8bb0d1;
+    }
+    .hud-meta b { color: #ffffff; font-weight: 600; }
+
+    #telemetry {
+      top: 22px; right: 22px;
+      text-align: right;
+      font-size: 12px;
+      line-height: 1.8;
+      min-width: 240px;
+    }
+    #telemetry .val { color: var(--primary); font-weight: 700; }
+
+    /* Top Center Navigation Bar (Visible in Country / City Mode) */
+    #top-nav {
+      position: fixed;
+      top: 22px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-120px);
+      z-index: 22;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      pointer-events: auto;
+      transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    #top-nav.visible {
+      transform: translateX(-50%) translateY(0);
+    }
+    .nav-btn {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      color: #fff;
+      background: rgba(6, 18, 34, 0.88);
+      border: 1px solid var(--primary);
+      padding: 10px 18px;
+      border-radius: 6px;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6), 0 0 12px rgba(0, 240, 255, 0.25);
+      transition: 0.2s;
+    }
+    .nav-btn:hover, .nav-btn.hot {
+      background: var(--primary);
+      color: #000b14;
+      box-shadow: 0 0 22px var(--primary);
+    }
+    #country-banner {
+      padding: 8px 16px;
+      font-family: var(--font-display);
+      font-size: 13px;
+      color: var(--gold);
+      letter-spacing: 0.1em;
+      background: rgba(6, 14, 26, 0.88);
+      border: 1px solid rgba(255, 204, 51, 0.4);
+      border-radius: 6px;
+    }
+
+    #controls-hint {
+      bottom: 22px; left: 22px;
+      font-size: 11px;
+      line-height: 1.95;
+      color: #9cbcd9;
+    }
+    #controls-hint span {
+      display: inline-block;
+      padding: 1px 7px;
+      background: rgba(0, 240, 255, 0.12);
+      border: 1px solid rgba(0, 240, 255, 0.35);
+      border-radius: 4px;
+      color: #fff;
+      font-weight: 600;
+      margin-right: 6px;
+    }
+
+    /* Webcam PiP */
+    #cam-container {
+      bottom: 22px; right: 22px;
+      width: 220px; height: 165px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #020a14;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.7);
+      transform: scaleX(-1);
+    }
+    #webcam-video, #webcam-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+
+    /* 3D Floating HTML Markers & Labels */
+    #labels-container {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 6;
+    }
+    .pin-label {
+      position: absolute;
+      left: 0; top: 0;
+      transform: translate(-50%, -140%);
+      font-family: var(--font-display);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      color: #ffffff;
+      background: rgba(2, 14, 28, 0.85);
+      border: 1px solid rgba(0, 240, 255, 0.5);
+      padding: 4px 10px;
+      border-radius: 4px;
+      white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.65);
+      transition: opacity 0.2s, border-color 0.2s, transform 0.2s;
+    }
+    .pin-label.city-type {
+      border-color: rgba(255, 204, 51, 0.65);
+      color: #fff6d6;
+    }
+    .pin-label.hovered {
+      border-color: var(--emerald);
+      color: var(--emerald);
+      transform: translate(-50%, -155%) scale(1.12);
+      box-shadow: 0 0 18px rgba(0, 255, 170, 0.5);
+      z-index: 15;
+    }
+
+    /* Floating Hover Quick-Info Tooltip (Appears when hovering Country or City!) */
+    #quick-preview {
+      position: fixed;
+      left: 0; top: 0;
+      width: 270px;
+      z-index: 18;
+      pointer-events: none;
+      opacity: 0;
+      transform: translate3d(-999px, -999px, 0) scale(0.92);
+      transition: opacity 0.18s ease, transform 0.18s ease;
+      background: rgba(4, 14, 28, 0.92);
+      backdrop-filter: blur(14px);
+      border: 1px solid var(--emerald);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 255, 170, 0.25);
+    }
+    #quick-preview.show {
+      opacity: 1;
+    }
+    #qp-img {
+      width: 100%;
+      height: 105px;
+      object-fit: cover;
+      display: block;
+      border-bottom: 1px solid rgba(0, 255, 170, 0.25);
+    }
+    .qp-body {
+      padding: 10px 12px;
+    }
+    .qp-tag {
+      font-size: 9.5px;
+      color: var(--emerald);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .qp-title {
+      font-family: var(--font-display);
+      font-size: 15px;
+      color: #fff;
+      margin: 2px 0 5px;
+    }
+    .qp-short {
+      font-size: 11px;
+      color: #b5d2eb;
+      line-height: 1.45;
+    }
+    .qp-hint {
+      margin-top: 7px;
+      padding-top: 6px;
+      border-top: 1px dashed rgba(255, 255, 255, 0.12);
+      font-size: 10px;
+      color: var(--gold);
+      letter-spacing: 0.06em;
+    }
+
+    /* Virtual Hand Cursor */
+    #virtual-cursor {
+      position: fixed;
+      left: 0; top: 0;
+      width: 44px; height: 44px;
+      margin-left: -22px; margin-top: -22px;
+      pointer-events: none;
+      z-index: 99;
+      transform: translate3d(-100px, -100px, 0);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .cursor-core {
+      width: 8px; height: 8px;
+      background: #fff;
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--primary);
+      transition: transform 0.12s, background 0.12s;
+    }
+    #virtual-cursor svg {
+      position: absolute;
+      inset: 0;
+      width: 100%; height: 100%;
+      transform: rotate(-90deg);
+    }
+    .ring-bg {
+      fill: none;
+      stroke: rgba(0, 240, 255, 0.4);
+      stroke-width: 2;
+    }
+    .ring-progress {
+      fill: none;
+      stroke: var(--emerald);
+      stroke-width: 3.2;
+      stroke-dasharray: 113;
+      stroke-dashoffset: 113;
+      transition: stroke-dashoffset 0.06s linear;
+    }
+    #virtual-cursor.snapped .ring-bg {
+      stroke: var(--emerald);
+      stroke-width: 2.5;
+    }
+    #virtual-cursor.pinching .cursor-core {
+      transform: scale(1.8);
+      background: var(--emerald);
+    }
+    #virtual-cursor.grabbing .ring-bg {
+      stroke: #ff5577;
+      stroke-dasharray: 4 3;
+    }
+
+    /* Full City Info & Landmarks Card */
+    #target-card {
+      position: fixed;
+      right: 24px;
+      top: 50%;
+      transform: translateY(-50%) translateX(120%);
+      width: min(415px, 92vw);
+      max-height: 86vh;
+      z-index: 25;
+      pointer-events: auto;
+      transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;
+      opacity: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    #target-card.open {
+      transform: translateY(-50%) translateX(0);
+      opacity: 1;
+    }
+
+    .hero-banner {
+      position: relative;
+      width: 100%;
+      height: 190px;
+      background: #041122;
+      overflow: hidden;
+    }
+    .hero-banner img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .hero-banner::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, transparent 30%, rgba(6, 14, 26, 0.98) 100%);
+    }
+    .hero-title-wrap {
+      position: absolute;
+      bottom: 12px; left: 20px; right: 20px;
+      z-index: 2;
+    }
+    .hero-title-wrap span.badge {
+      font-size: 10px;
+      padding: 2px 8px;
+      background: rgba(0, 255, 170, 0.18);
+      border: 1px solid var(--emerald);
+      border-radius: 3px;
+      color: var(--emerald);
+      letter-spacing: 0.12em;
+      font-weight: 600;
+    }
+    .hero-title-wrap h2 {
+      font-family: var(--font-display);
+      font-size: 22px;
+      color: #fff;
+      letter-spacing: 0.05em;
+      margin-top: 5px;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.9);
+    }
+
+    .card-body {
+      padding: 14px 20px 18px;
+    }
+    .city-facts-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .fact-box {
+      background: rgba(0, 240, 255, 0.06);
+      border: 1px solid rgba(0, 240, 255, 0.2);
+      border-radius: 5px;
+      padding: 6px 8px;
+      text-align: center;
+    }
+    .fact-box span {
+      display: block;
+      font-size: 9px;
+      color: #7fa5c4;
+      letter-spacing: 0.08em;
+    }
+    .fact-box b {
+      font-size: 11.5px;
+      color: var(--gold);
+      font-weight: 600;
+    }
+
+    .card-desc {
+      font-size: 12px;
+      line-height: 1.55;
+      color: #b7d2eb;
+      margin-bottom: 12px;
+    }
+    .spot-card {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding: 8px;
+      margin-bottom: 8px;
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(0, 240, 255, 0.14);
+      border-radius: 6px;
+    }
+    .spot-card img {
+      width: 66px;
+      height: 54px;
+      object-fit: cover;
+      border-radius: 4px;
+      flex-shrink: 0;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    .spot-info h4 {
+      font-family: var(--font-display);
+      font-size: 13px;
+      color: #fff;
+      margin-bottom: 2px;
+    }
+    .spot-info p {
+      font-size: 11px;
+      color: #89a9c6;
+      line-height: 1.35;
+    }
+    .spot-rating {
+      color: var(--gold);
+      font-size: 10.5px;
+      margin-top: 2px;
+      font-weight: 600;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .btn-action {
+      flex: 1;
+      padding: 10px;
+      font-family: var(--font-display);
+      font-weight: 700;
+      background: rgba(0, 240, 255, 0.14);
+      border: 1px solid var(--primary);
+      border-radius: 5px;
+      color: #fff;
+      cursor: pointer;
+      letter-spacing: 0.1em;
+      font-size: 11px;
+      transition: 0.2s;
+    }
+    .btn-action:hover, .btn-action.hot {
+      background: var(--primary);
+      color: #000b14;
+      box-shadow: 0 0 18px var(--primary);
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="webgl-canvas"></canvas>
+  <div class="vignette"></div>
+  <div id="labels-container"></div>
+
+  <!-- Floating Quick-Info Card on Hover -->
+  <div id="quick-preview">
+    <img id="qp-img" src="" alt="Preview" />
+    <div class="qp-body">
+      <div class="qp-tag" id="qp-tag">COUNTRY</div>
+      <div class="qp-title" id="qp-title">Name</div>
+      <div class="qp-short" id="qp-short">Short description...</div>
+      <div class="qp-hint" id="qp-hint">PINCH OR HOLD TO EXPLORE CITIES</div>
+    </div>
+  </div>
+
+  <!-- Top Navigation Bar for Country / City Hierarchy -->
+  <div id="top-nav">
+    <button class="nav-btn" id="btn-top-back">&#9664; BACK TO GLOBE</button>
+    <div id="country-banner">SECTOR: INDIA</div>
+  </div>
+
+  <!-- Magnetic Reticle with Radial Progress -->
+  <div id="virtual-cursor">
+    <svg viewBox="0 0 40 40">
+      <circle class="ring-bg" cx="20" cy="20" r="18"></circle>
+      <circle class="ring-progress" id="cursor-ring" cx="20" cy="20" r="18"></circle>
+    </svg>
+    <div class="cursor-core"></div>
+  </div>
+
+  <!-- Left Telemetry Panel -->
+  <div class="hud glass-panel" id="header">
+    <h1><span class="status-dot"></span>TERRA//PRIME</h1>
+    <div class="hud-meta">
+      MODE: <b id="view-level">GLOBAL COUNTRY SELECT</b><br>
+      SENSOR: <b id="hand-status">INITIALISING CAMERA...</b><br>
+      GESTURE: <b id="gesture-type">STANDBY</b><br>
+      TARGET: <b id="target-title">EARTH ORBIT</b>
+    </div>
+  </div>
+
+  <!-- Right Telemetry Panel -->
+  <div class="hud glass-panel" id="telemetry">
+    UTC CLOCK: <span class="val" id="time-val">00:00:00</span><br>
+    ALTITUDE: <span class="val" id="alt-val">13,500 KM</span><br>
+    COORDS: <span class="val" id="coord-val">0.0° N, 0.0° E</span>
+  </div>
+
+  <!-- Bottom Gesture Guide -->
+  <div class="hud glass-panel" id="controls-hint">
+    <div><span>STEP 1 (COUNTRIES)</span> Hover Country for Summary • Pinch/Hold to Zoom In</div>
+    <div><span>STEP 2 (CITIES)</span> Hover Any City Pin for Quick Info + Photo</div>
+    <div><span>STEP 3 (RECON CARD)</span> Pinch/Hold City Pin for Full Landmarks Card</div>
+    <div><span>FIST GRAB / MOUSE</span> Closed Fist or Left-Click Drag to Rotate</div>
+  </div>
+
+  <!-- Camera Preview -->
+  <div class="hud" id="cam-container">
+    <video id="webcam-video" playsinline muted></video>
+    <canvas id="webcam-canvas" width="320" height="240"></canvas>
+  </div>
+
+  <!-- Detailed City Photo & Landmarks Recon Card -->
+  <div class="glass-panel" id="target-card">
+    <div class="hero-banner">
+      <img id="card-hero-img" src="" alt="City Photo" />
+      <div class="hero-title-wrap">
+        <span class="badge" id="card-coords-badge">CITY RECON</span>
+        <h2 id="card-heading">CITY NAME</h2>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="city-facts-grid">
+        <div class="fact-box"><span>POPULATION</span><b id="fact-pop">--</b></div>
+        <div class="fact-box"><span>BEST KNOWN</span><b id="fact-vibe">--</b></div>
+        <div class="fact-box"><span>TIMEZONE</span><b id="fact-tz">--</b></div>
+      </div>
+      <p class="card-desc" id="card-desc"></p>
+      <div id="card-spots"></div>
+      <div class="card-actions">
+        <button class="btn-action" id="btn-back-cities">&#9664; OTHER CITIES</button>
+        <button class="btn-action" id="btn-back-orbit">&#9650; GLOBAL ORBIT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js"></script>
+
+  <script>
+    /* =========================================================================
+       1. HIERARCHICAL DATA: COUNTRIES -> CITIES -> SHORT INFO + PHOTOS
+       ========================================================================= */
+    const WORLD_DATA = [
+      {
+        name: "India",
+        lat: 21.0, lon: 78.0,
+        zoom: 7.5,
+        shortInfo: "South Asian powerhouse spanning the Himalayas to the Indian Ocean, blending ancient heritage with booming tech & finance hubs.",
+        heroImg: "https://images.unsplash.com/photo-1524492412937-b28074a5d7da?auto=format&fit=crop&w=600&q=80",
+        cities: [
+          {
+            name: "Mumbai",
+            lat: 19.0760, lon: 72.8777,
+            pop: "21.3M", vibe: "Finance & Coast", tz: "IST (UTC+5:30)",
+            shortInfo: "India's financial capital on the Arabian Sea, famous for Marine Drive, Bollywood, and grand colonial architecture.",
+            heroImg: "https://images.unsplash.com/photo-1566552881560-0be862a7c445?auto=format&fit=crop&w=900&q=85",
+            spots: [
+              { n: "Gateway of India", d: "Iconic 1924 waterfront basalt arch overlooking Mumbai Harbour.", r: "4.8", img: "https://images.unsplash.com/photo-1570168007204-dfb528c6958f?auto=format&fit=crop&w=300&q=80" },
+              { n: "Marine Drive & Sea Link", d: "The 3.6 km Queen's Necklace promenade & cable-stayed bridge.", r: "4.9", img: "https://images.unsplash.com/photo-1529253355930-ddbe423a2ac7?auto=format&fit=crop&w=300&q=80" }
+            ]
+          },
+          {
+            name: "New Delhi",
+            lat: 28.6139, lon: 77.2090,
+            pop: "32.9M", vibe: "Capital & History", tz: "IST (UTC+5:30)",
+            shortInfo: "India's national capital where centuries-old Mughal fortresses stand alongside grand tree-lined avenues.",
+            heroImg: "https://images.unsplash.com/photo-1587474260584-136574528ed5?auto=format&fit=crop&w=900&q=85",
+            spots: [
+              { n: "India Gate & Kartavya Path", d: "Monumental 42m sandstone war memorial arch in central Delhi.", r: "4.8", img: "https://images.unsplash.com/photo-1587474260584-136574528ed5?auto=format&fit=crop&w=300&q=80" },
+              { n: "Humayun's Tomb & Red Fort", d: "UNESCO red sandstone Mughal architectural masterpieces.", r: "4.9", img: "https://images.unsplash.com/photo-1548013146-72479768bada?auto=format&fit=crop&w=300&q=80" }
+            ]
+          },
+          {
+            name: "Bengaluru",
+            lat: 12.9716, lon: 77.5946,
+            pop: "13.6M", vibe: "Silicon Valley", tz: "IST (UTC+5:30)",
+            shortInfo: "India's high-altitude Garden City and leading software, AI, and aerospace innovation capital.",
+            heroImg: "https://images.unsplash.com/photo-1596176530529-78163a4f7af2?auto=format&fit=crop&w=900&q=85",
+            spots: [
+              { n: "Vidhana Soudha & Cubbon Park", d: "Neo-Dravidian granite parliament surrounded by 300 acres of greenery.", r: "4.8", img: "https://images.unsplash.com/photo-1596176530529-78163a4f7af2?auto=format&fit=crop&w=300&q=80" },
+              { n: "Lalbagh Botanical Garden", d: "18th-century botanical garden with an iconic 1889 glasshouse.", r: "4.7", img: "https://images.unsplash.com/photo-1582510003544-4d00b7f74220?auto=format&fit=crop&w=300&q=80" }
+            ]
+          }
+        ]
+      },
+      {
+        name: "Japan",
+        lat: 36.2, lon: 138.2,
+        zoom: 7.3,
+        shortInfo: "Pacific island nation uniting bullet-train technology and neon metropolises with serene Zen temples and Mount Fuji.",
+        heroImg: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&w=600&q=80",
+        cities: [
+          {
+            name: "Tokyo",
+            lat: 35.6762, lon: 139.6503,
+            pop: "37.4M", vibe: "Cyberpunk & Tech", tz: "JST (UTC+9)",
+            shortInfo: "The world's largest metropolitan area, famous for Shibuya Crossing, Shinjuku skyscrapers, and historic Asakusa.",
+            heroImg: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=900&q=85",
+            spots: [
+              { n: "Shibuya Crossing", d: "Iconic neon-lit scramble crossing in the heart of Tokyo.", r: "4.9", img: "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=300&q=80" },
+              { n: "Senso-ji Temple", d: "Tokyo's oldest Buddhist temple founded in 645 AD.", r: "4.8", img: "https://images.unsplash.com/photo-1536098561742-ca998e48cbcc?auto=format&fit=crop&w=300&q=80" }
+            ]
+          },
+          {
+            name: "Kyoto",
+            lat: 35.0116, lon: 135.7681,
+            pop: "1.46M", vibe: "Imperial Heritage", tz: "JST (UTC+9)",
+            shortInfo: "Japan's former imperial capital for over 1,000 years, home to 2,000+ shrines, geisha districts, and bamboo forests.",
+            heroImg: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&w=900&q=85",
+            spots: [
+              { n: "Fushimi Inari Taisha", d: "Mountain shrine famous for thousands of vermilion torii gates.", r: "4.9", img: "https://images.unsplash.com/photo-1478436127897-769e1b3f0f36?auto=format&fit=crop&w=300&q=80" },
+              { n: "Kinkaku-ji (Golden Pavilion)", d: "Zen temple covered in pure gold leaf beside a mirror pond.", r: "4.8", img: "https://images.unsplash.com/photo-1545569341-9eb8b30979d9?auto=format&fit=crop&w=300&q=80" }
+            ]
+          },
+          {
+            name: "Osaka",
+            lat: 32.8, lon: 133.5, // slightly offset for clean visual separation on globe
+            pop: "19.0M", vibe: "Street Food & Port", tz: "JST (UTC+9)",
+            shortInfo: "Vibrant port city known as 'the Nation's Kitchen', celebrated for Dotonbori canals and Osaka Castle.",
+            heroImg: "https://images.unsplash.com/photo-1590559899731-a382839e5549?auto=format&fit=crop&w=900&q=85",
+            spots: [
+              { n: "Dotonbori Canal", d: "Dazzling riverside food and entertainment district.", r: "4.8", img: "https://images.unsplash.com/photo-1590559899731-a382839e5549?auto=format&fit=crop&w=300&q=80" },
+              { n: "Osaka Castle", d: "16th-century samurai fortress surrounded by cherry blossom moats.", r: "4.8", img: "https://images.unsplash.com/photo-1589452271712-64b8a66c7b71?auto=format&fit=crop&w=300&q=80" }
+            ]
+          }
+        ]
+      },
+      {
+        name: "USA",
+        lat: 38.0, lon: -97.0,
+        zoom: 8.2,
+        shortInfo: "Spanning from the Atlantic to the Pacific with world-leading financial skylines, tech hubs, and natural wonders.",
+        heroImg: "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?auto=format&fit=crop&w=600&q=80",
+        cities: [
+          {
+            name: "New York",
+            lat: 40.7128, lon: -74.0060,
+            pop: "19.6M", vibe: "Global Finance", tz: "EST (UTC-5)",
+            shortInfo: "Iconic five-borough metropolis anchored by Manhattan's skyscrapers, Central Park, and Broadway.",
+            heroImg: "https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?auto=format&fit=crop&w=900&q=85",
+            spots: [
+              { n: "Manhattan Skyline", d: "World-famous Art Deco & modern supertall towers.", r: "4.9", img: "https://images.unsplash.com/photo-1534430480872-3498386e7856?auto=format&fit=crop&w=300&q=80" },
+              { n: "Central Park", d: "843-acre urban park in the center of Manhattan.", r: "4.9", img: "https://images.unsplash.com/photo-1500916434205-0c77489c6cf7?auto=format&fit=crop&w=300&q=80" }
+            ]
+          },
+          {
+            name: "Los Angeles",
+            lat: 34.0522, lon: -118.2437,
+            pop: "12.8M", vibe: "Cinema & Coast", tz: "PST (UTC-8)",
+            shortInfo: "Southern California's sun-drenched entertainment capital framed by Santa Monica beaches and the Hollywood Hills.",
+            heroImg: "https://images.unsplash.com/photo-1580655653885-65763b2597d0?auto=format&fit=crop&w=900&q=85",
+            spots: [
+              { n: "Griffith Observatory", d: "Art Deco planetarium overlooking the LA basin and Hollywood Sign.", r: "4.8", img: "https://images.unsplash.com/photo-1580655653885-65763b2597d0?auto=format&fit=crop&w=300&q=80" },
+              { n: "Santa Monica Pier", d: "Historic Pacific Ocean pier with a solar-powered Ferris wheel.", r: "4.7", img: "https://images.unsplash.com/photo-1534190760961-74e8c1c5c3da?auto=format&fit=crop&w=300&q=80" }
+            ]
+          },
+          {
+            name: "San Francisco",
+            lat: 39.5, lon: -123.5,
+            pop: "4.6M", vibe: "AI & Bay Area", tz: "PST (UTC-8)",
+            shortInfo: "Northern California bay city known for the Golden Gate Bridge, steep cable-car hills, and AI startups.",
+            heroImg: "https://images.unsplash.com/photo-1501594907352-04cda38ebc29?auto=format&fit=crop&w=900&q=85",
+            spots: [
+              { n: "Golden Gate Bridge", d: "2.7 km International Orange suspension bridge across the strait.", r: "4.9", img: "https://images.unsplash.com/photo-1501594907352-04cda38ebc29?auto=format&fit=crop&w=300&q=80" }
+            ]
+          }
+        ]
+      },
+      {
+        name: "France",
+        lat: 46.6, lon: 2.4,
+        zoom: 7.2,
+        shortInfo: "Western European cultural beacon celebrated for art, gothic cathedrals, Alpine peaks, and the Mediterranean Riviera.",
+        heroImg: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=600&q=80",
+        cities: [
+          {
+            name: "Paris",
+            lat: 48.8566, lon: 2.3522,
+            pop: "11.2M", vibe: "Art & Architecture", tz: "CET (UTC+1)",
+            shortInfo: "The City of Light along the Seine River, famed for the Eiffel Tower, the Louvre, and Haussmann boulevards.",
+            heroImg: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=900&q=85",
+            spots: [
+              { n: "Eiffel Tower", d: "330m wrought-iron landmark overlooking the Champ de Mars.", r: "4.9", img: "https://images.unsplash.com/photo-1511739001486-6bfe10ce785f?auto=format&fit=crop&w=300&q=80" },
+              { n: "Louvre Museum", d: "World's largest art museum with its iconic glass pyramid.", r: "4.8", img: "https://images.unsplash.com/photo-1565099824688-e93eb20fe622?auto=format&fit=crop&w=300&q=80" }
+            ]
+          },
+          {
+            name: "Nice",
+            lat: 43.7102, lon: 7.2620,
+            pop: "1.0M", vibe: "French Riviera", tz: "CET (UTC+1)",
+            shortInfo: "Glamorous Côte d'Azur coastal city famous for the Promenade des Anglais and turquoise Mediterranean waters.",
+            heroImg: "https://images.unsplash.com/photo-1533105079780-92b9be482077?auto=format&fit=crop&w=900&q=85",
+            spots: [
+              { n: "Promenade des Anglais", d: "Sunlit palm-lined seafront boulevard curving along Baie des Anges.", r: "4.8", img: "https://images.unsplash.com/photo-1533105079780-92b9be482077?auto=format&fit=crop&w=300&q=80" }
+            ]
+          }
+        ]
+      },
+      {
+        name: "Egypt",
+        lat: 27.5, lon: 30.8,
+        zoom: 7.3,
+        shortInfo: "Cradle of pharaonic civilization along the fertile Nile River valley, home to the Pyramids and Red Sea reefs.",
+        heroImg: "https://images.unsplash.com/photo-1539650116574-8efeb43e2750?auto=format&fit=crop&w=600&q=80",
+        cities: [
+          {
+            name: "Cairo",
+            lat: 30.0444, lon: 31.2357,
+            pop: "22.1M", vibe: "Ancient Wonders", tz: "EET (UTC+2)",
+            shortInfo: "Vast Nile capital standing directly beside the 4,500-year-old Giza Pyramid complex and the Great Sphinx.",
+            heroImg: "https://images.unsplash.com/photo-1539650116574-8efeb43e2750?auto=format&fit=crop&w=900&q=85",
+            spots: [
+              { n: "Pyramids of Giza", d: "Monumental limestone tombs of Pharaohs Khufu, Khafre, and Menkaure.", r: "4.9", img: "https://images.unsplash.com/photo-1503177119275-0aa32b3a9368?auto=format&fit=crop&w=300&q=80" }
+            ]
+          },
+          {
+            name: "Luxor",
+            lat: 25.6872, lon: 32.6396,
+            pop: "1.3M", vibe: "Open-Air Museum", tz: "EET (UTC+2)",
+            shortInfo: "Built on the site of ancient Thebes, housing the Valley of the Kings and the colossal Karnak Temple.",
+            heroImg: "https://images.unsplash.com/photo-1568322445389-f64ac2515020?auto=format&fit=crop&w=900&q=85",
+            spots: [
+              { n: "Karnak & Luxor Temples", d: "Massive sandstone columns and royal avenues of sphinxes.", r: "4.9", img: "https://images.unsplash.com/photo-1568322445389-f64ac2515020?auto=format&fit=crop&w=300&q=80" }
+            ]
+          }
+        ]
+      }
+    ];
+
+    /* =========================================================================
+       2. ULTRA-SHARP THREE.JS EARTH ENGINE
+       ========================================================================= */
+    const canvas = document.getElementById('webgl-canvas');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.22;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 0, 14.5);
+
+    const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin('anonymous');
+
+    function loadSharpTexture(url, isSRGB = false) {
+      const tex = loader.load(url);
+      tex.anisotropy = maxAnisotropy;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      if (isSRGB) tex.encoding = THREE.sRGBEncoding;
+      return tex;
+    }
+
+    const EARTH_RADIUS = 5.0;
+    const textures = {
+      day: loadSharpTexture('https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/planets/earth_atmos_2048.jpg', true),
+      normal: loadSharpTexture('https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/planets/earth_normal_2048.jpg'),
+      specular: loadSharpTexture('https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/planets/earth_specular_2048.jpg'),
+      lights: loadSharpTexture('https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/planets/earth_lights_2048.png', true),
+      clouds: loadSharpTexture('https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/planets/earth_clouds_1024.png')
+    };
+
+    const earthGroup = new THREE.Group();
+    earthGroup.rotation.y = -2.7;
+    earthGroup.rotation.x = 0.25;
+    scene.add(earthGroup);
+
+    const earthMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(EARTH_RADIUS, 128, 128),
+      new THREE.MeshPhongMaterial({
+        map: textures.day,
+        normalMap: textures.normal,
+        normalScale: new THREE.Vector2(1.4, 1.4),
+        specularMap: textures.specular,
+        specular: new THREE.Color(0x225588),
+        shininess: 28,
+        emissiveMap: textures.lights,
+        emissive: new THREE.Color(0xffcc66),
+        emissiveIntensity: 0.45
+      })
+    );
+    earthGroup.add(earthMesh);
+
+    const cloudMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(EARTH_RADIUS + 0.035, 128, 128),
+      new THREE.MeshLambertMaterial({
+        map: textures.clouds,
+        transparent: true,
+        opacity: 0.4,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      })
+    );
+    earthGroup.add(cloudMesh);
+
+    const atmosMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(EARTH_RADIUS * 1.13, 96, 96),
+      new THREE.ShaderMaterial({
+        vertexShader: `
+          varying vec3 vNormal;
+          void main() {
+            vNormal = normalize(normalMatrix * normal);
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          varying vec3 vNormal;
+          void main() {
+            float intensity = pow(0.62 - dot(vNormal, vec3(0, 0, 1.0)), 2.4);
+            gl_FragColor = vec4(0.15, 0.68, 1.0, 1.0) * intensity * 1.65;
+          }
+        `,
+        blending: THREE.AdditiveBlending,
+        side: THREE.BackSide,
+        transparent: true,
+        depthWrite: false
+      })
+    );
+    scene.add(atmosMesh);
+
+    // Stars
+    const starGeo = new THREE.BufferGeometry();
+    const starPos = new Float32Array(4000 * 3);
+    for (let i = 0; i < 4000 * 3; i += 3) {
+      const r = 180 + Math.random() * 250;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      starPos[i] = r * Math.sin(phi) * Math.cos(theta);
+      starPos[i + 1] = r * Math.sin(phi) * Math.sin(theta);
+      starPos[i + 2] = r * Math.cos(phi);
+    }
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.75, transparent: true, opacity: 0.85 })));
+
+    // Lighting
+    const sunLight = new THREE.DirectionalLight(0xffffff, 1.75);
+    sunLight.position.set(14, 7, 12);
+    scene.add(sunLight);
+    const rimLight = new THREE.DirectionalLight(0x3399ff, 0.65);
+    rimLight.position.set(-12, -6, -8);
+    scene.add(rimLight);
+    scene.add(new THREE.AmbientLight(0x162b47, 0.75));
+
+    /* =========================================================================
+       3. HIERARCHICAL MARKERS: COUNTRY PINS & CITY PINS
+       ========================================================================= */
+    function latLonToVec3(lat, lon, radius) {
+      const phi = (90 - lat) * (Math.PI / 180);
+      const theta = (lon + 180) * (Math.PI / 180);
+      return new THREE.Vector3(
+        -radius * Math.sin(phi) * Math.cos(theta),
+        radius * Math.cos(phi),
+        radius * Math.sin(phi) * Math.sin(theta)
+      );
+    }
+
+    const markerGroup = new THREE.Group();
+    earthGroup.add(markerGroup);
+    const labelsContainer = document.getElementById('labels-container');
+
+    let countryNodes = [];
+    let cityNodes = [];
+    let appState = 'globe'; // 'globe' | 'country' | 'city'
+    let activeCountry = null;
+    let activeCity = null;
+    let isTransitioning = false;
+
+    function createPinNode(item, type) {
+      const pos = latLonToVec3(item.lat, item.lon, EARTH_RADIUS + 0.015);
+      const pin = new THREE.Group();
+      pin.position.copy(pos);
+      pin.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), pos.clone().normalize());
+
+      const color = type === 'country' ? 0x00f0ff : 0xffcc33;
+      const ringMesh = new THREE.Mesh(
+        new THREE.RingGeometry(type === 'country' ? 0.09 : 0.06, type === 'country' ? 0.14 : 0.10, 32),
+        new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: true, opacity: 0.95 })
+      );
+      ringMesh.rotation.x = Math.PI / 2;
+      pin.add(ringMesh);
+
+      const dotMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(type === 'country' ? 0.07 : 0.05, 16, 16),
+        new THREE.MeshBasicMaterial({ color: 0xffffff })
+      );
+      dotMesh.position.y = 0.07;
+      pin.add(dotMesh);
+
+      markerGroup.add(pin);
+
+      const labelEl = document.createElement('div');
+      labelEl.className = `pin-label ${type === 'city' ? 'city-type' : ''}`;
+      labelEl.textContent = type === 'country' ? `◈ ${item.name.toUpperCase()}` : `● ${item.name.toUpperCase()}`;
+      labelsContainer.appendChild(labelEl);
+
+      return {
+        item,
+        type,
+        pin,
+        ringMesh,
+        labelEl,
+        screenX: -1000,
+        screenY: -1000,
+        visible: true
+      };
+    }
+
+    // Spawn initial Country Pins
+    countryNodes = WORLD_DATA.map(c => createPinNode(c, 'country'));
+
+    function clearCityNodes() {
+      cityNodes.forEach(n => {
+        markerGroup.remove(n.pin);
+        n.labelEl.remove();
+      });
+      cityNodes = [];
+    }
+
+    /* =========================================================================
+       4. WORKFLOW TRANSITIONS: GLOBE -> COUNTRY -> CITY INFO
+       ========================================================================= */
+    const viewLevelEl = document.getElementById('view-level');
+    const targetTitleEl = document.getElementById('target-title');
+    const topNav = document.getElementById('top-nav');
+    const btnTopBack = document.getElementById('btn-top-back');
+    const countryBanner = document.getElementById('country-banner');
+    const targetCard = document.getElementById('target-card');
+    const quickPreview = document.getElementById('quick-preview');
+
+    function focusCameraOnLatLon(lat, lon, distance, offsetRight = 0, duration = 1.4, onDone) {
+      const targetPos = latLonToVec3(lat, lon, EARTH_RADIUS);
+      const rho = Math.hypot(targetPos.x, targetPos.z);
+      let angleY = Math.atan2(-targetPos.x, targetPos.z) - offsetRight;
+      const angleX = Math.atan2(targetPos.y, rho);
+
+      angleY += Math.round((earthGroup.rotation.y - angleY) / (Math.PI * 2)) * (Math.PI * 2);
+
+      gsap.to(earthGroup.rotation, { x: angleX, y: angleY, duration, ease: "power3.inOut" });
+      gsap.to(camera.position, { z: distance, duration, ease: "power3.inOut", onComplete: onDone });
+    }
+
+    // 1. Select Country -> Zoom in & Spawn City Pins
+    function enterCountry(country) {
+      if (isTransitioning) return;
+      isTransitioning = true;
+      appState = 'country';
+      activeCountry = country;
+      activeCity = null;
+
+      viewLevelEl.textContent = "COUNTRY CITIES VIEW";
+      targetTitleEl.textContent = country.name.toUpperCase();
+      countryBanner.textContent = `${country.name.toUpperCase()} — SELECT A CITY`;
+      btnTopBack.innerHTML = `&#9664; BACK TO GLOBE`;
+      topNav.classList.add('visible');
+      targetCard.classList.remove('open');
+      quickPreview.classList.remove('show');
+
+      // Hide Country Pins
+      countryNodes.forEach(n => {
+        n.pin.visible = false;
+        n.labelEl.style.opacity = '0';
+      });
+
+      // Spawn City Pins for this Country
+      clearCityNodes();
+      cityNodes = country.cities.map(city => createPinNode(city, 'city'));
+
+      focusCameraOnLatLon(country.lat, country.lon, country.zoom, 0, 1.4, () => {
+        isTransitioning = false;
+      });
+    }
+
+    // 2. Select City -> Zoom closer & Show Full City Info Card + Photos
+    function enterCity(city) {
+      if (isTransitioning) return;
+      isTransitioning = true;
+      appState = 'city';
+      activeCity = city;
+
+      viewLevelEl.textContent = "CITY RECON INSPECTOR";
+      targetTitleEl.textContent = `${activeCountry.name.toUpperCase()} // ${city.name.toUpperCase()}`;
+      countryBanner.textContent = `${city.name.toUpperCase()}, ${activeCountry.name.toUpperCase()}`;
+      btnTopBack.innerHTML = `&#9664; BACK TO ${activeCountry.name.toUpperCase()} CITIES`;
+      quickPreview.classList.remove('show');
+
+      // Populate City Card
+      document.getElementById('card-hero-img').src = city.heroImg;
+      document.getElementById('card-heading').textContent = `${city.name}, ${activeCountry.name}`;
+      document.getElementById('card-coords-badge').textContent =
+        `${Math.abs(city.lat).toFixed(2)}° ${city.lat >= 0 ? 'N' : 'S'} • ${Math.abs(city.lon).toFixed(2)}° ${city.lon >= 0 ? 'E' : 'W'}`;
+      document.getElementById('fact-pop').textContent = city.pop;
+      document.getElementById('fact-vibe').textContent = city.vibe;
+      document.getElementById('fact-tz').textContent = city.tz;
+      document.getElementById('card-desc').textContent = city.shortInfo;
+
+      document.getElementById('card-spots').innerHTML = city.spots.map(s => `
+        <div class="spot-card">
+          <img src="${s.img}" alt="${s.n}" loading="lazy" />
+          <div class="spot-info">
+            <h4>${s.n}</h4>
+            <p>${s.d}</p>
+            <div class="spot-rating">★ ${s.r} / 5.0</div>
+          </div>
+        </div>
+      `).join('');
+
+      targetCard.classList.add('open');
+
+      focusCameraOnLatLon(city.lat, city.lon, activeCountry.zoom - 1.15, 0.14, 1.2, () => {
+        isTransitioning = false;
+      });
+    }
+
+    // Back from City -> Country Cities
+    function backToCountryCities() {
+      if (isTransitioning || !activeCountry) return;
+      isTransitioning = true;
+      appState = 'country';
+      activeCity = null;
+
+      targetCard.classList.remove('open');
+      viewLevelEl.textContent = "COUNTRY CITIES VIEW";
+      targetTitleEl.textContent = activeCountry.name.toUpperCase();
+      countryBanner.textContent = `${activeCountry.name.toUpperCase()} — SELECT A CITY`;
+      btnTopBack.innerHTML = `&#9664; BACK TO GLOBE`;
+
+      focusCameraOnLatLon(activeCountry.lat, activeCountry.lon, activeCountry.zoom, 0, 1.1, () => {
+        isTransitioning = false;
+      });
+    }
+
+    // Back to Global Orbit
+    function backToGlobe() {
+      if (isTransitioning || appState === 'globe') return;
+      isTransitioning = true;
+      appState = 'globe';
+      activeCountry = null;
+      activeCity = null;
+
+      targetCard.classList.remove('open');
+      topNav.classList.remove('visible');
+      quickPreview.classList.remove('show');
+      viewLevelEl.textContent = "GLOBAL COUNTRY SELECT";
+      targetTitleEl.textContent = "EARTH ORBIT";
+
+      clearCityNodes();
+      countryNodes.forEach(n => { n.pin.visible = true; });
+
+      gsap.to(earthGroup.rotation, { x: 0.22, duration: 1.3, ease: "power2.inOut" });
+      gsap.to(camera.position, {
+        z: 14.5,
+        duration: 1.4,
+        ease: "power2.inOut",
+        onComplete: () => { isTransitioning = false; }
+      });
+    }
+
+    btnTopBack.addEventListener('click', () => {
+      if (appState === 'city') backToCountryCities();
+      else backToGlobe();
+    });
+    document.getElementById('btn-back-cities').addEventListener('click', backToCountryCities);
+    document.getElementById('btn-back-orbit').addEventListener('click', backToGlobe);
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (appState === 'city') backToCountryCities();
+        else backToGlobe();
+      }
+    });
+
+    /* =========================================================================
+       5. PRECISION HAND GESTURE ENGINE
+       ========================================================================= */
+    const handStatus = document.getElementById('hand-status');
+    const gestureType = document.getElementById('gesture-type');
+    const virtualCursor = document.getElementById('virtual-cursor');
+    const cursorRing = document.getElementById('cursor-ring');
+    const videoEl = document.getElementById('webcam-video');
+    const canvasEl = document.getElementById('webcam-canvas');
+    const ctx = canvasEl.getContext('2d');
+
+    let rawTarget = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    let smoothCursor = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    let isHandActive = false;
+    let isPinching = false;
+    let isFistGrab = false;
+    let prevGrabPos = null;
+    let rotVelocity = { x: 0, y: 0 };
+    let dwellProgress = 0;
+    let snappedNode = null;
+
+    function mapActiveZone(val, min = 0.18, max = 0.82) {
+      return Math.min(1, Math.max(0, (val - min) / (max - min)));
+    }
+
+    function triggerPrimarySelect() {
+      // Check interactive UI buttons first
+      const clickableBtns = [btnTopBack, document.getElementById('btn-back-cities'), document.getElementById('btn-back-orbit')];
+      for (const btn of clickableBtns) {
+        const rect = btn.getBoundingClientRect();
+        if (rect.width > 0 && smoothCursor.x >= rect.left && smoothCursor.x <= rect.right &&
+            smoothCursor.y >= rect.top && smoothCursor.y <= rect.bottom) {
+          btn.click();
+          return;
+        }
+      }
+
+      if (snappedNode) {
+        if (snappedNode.type === 'country') enterCountry(snappedNode.item);
+        else if (snappedNode.type === 'city') enterCity(snappedNode.item);
+      }
+    }
+
+    function onHandResults(results) {
+      ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+      ctx.strokeStyle = "rgba(0, 240, 255, 0.35)";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(canvasEl.width * 0.18, canvasEl.height * 0.18, canvasEl.width * 0.64, canvasEl.height * 0.64);
+
+      if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+        isHandActive = false;
+        isPinching = false;
+        isFistGrab = false;
+        prevGrabPos = null;
+        handStatus.textContent = "READY (SHOW HAND)";
+        gestureType.textContent = "MOUSE / STANDBY";
+        virtualCursor.classList.remove('pinching', 'grabbing');
+        return;
+      }
+
+      isHandActive = true;
+      handStatus.textContent = "LOCKED (60 FPS)";
+      const lm = results.multiHandLandmarks[0];
+
+      lm.forEach((p, idx) => {
+        ctx.fillStyle = (idx === 8 || idx === 4) ? "#00ffaa" : "#00f0ff";
+        ctx.beginPath();
+        ctx.arc(p.x * canvasEl.width, p.y * canvasEl.height, (idx === 8 || idx === 4) ? 5 : 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      const pointerX = lm[8].x * 0.65 + lm[9].x * 0.35;
+      const pointerY = lm[8].y * 0.65 + lm[9].y * 0.35;
+      rawTarget.x = (1.0 - mapActiveZone(pointerX)) * window.innerWidth;
+      rawTarget.y = mapActiveZone(pointerY) * window.innerHeight;
+
+      const palmScale = Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y) || 0.15;
+      const pinchRatio = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y) / palmScale;
+
+      const curledFingers = [12, 16, 20].filter(idx =>
+        Math.hypot(lm[idx].x - lm[0].x, lm[idx].y - lm[0].y) / palmScale < 1.15
+      ).length;
+
+      if (curledFingers >= 3 && pinchRatio > 0.32) {
+        isFistGrab = true;
+        isPinching = false;
+        virtualCursor.classList.add('grabbing');
+        virtualCursor.classList.remove('pinching');
+        gestureType.textContent = "FIST GRAB (ROTATE)";
+
+        const palmX = 1.0 - lm[9].x;
+        const palmY = lm[9].y;
+        if (prevGrabPos && appState !== 'city') {
+          rotVelocity.y = (palmX - prevGrabPos.x) * 4.0;
+          rotVelocity.x = (palmY - prevGrabPos.y) * 2.6;
+          earthGroup.rotation.y += rotVelocity.y;
+          earthGroup.rotation.x = Math.max(-1.2, Math.min(1.2, earthGroup.rotation.x + rotVelocity.x));
+        }
+        prevGrabPos = { x: palmX, y: palmY };
+      } else {
+        isFistGrab = false;
+        prevGrabPos = null;
+        virtualCursor.classList.remove('grabbing');
+
+        if (!isPinching && pinchRatio < 0.34) {
+          isPinching = true;
+          virtualCursor.classList.add('pinching');
+          gestureType.textContent = "PINCH SELECT";
+          triggerPrimarySelect();
+        } else if (isPinching && pinchRatio > 0.48) {
+          isPinching = false;
+          virtualCursor.classList.remove('pinching');
+        } else if (!isPinching) {
+          gestureType.textContent = "INDEX POINT";
+        }
+      }
+    }
+
+    try {
+      const hands = new Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`
+      });
+      hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.65, minTrackingConfidence: 0.65 });
+      hands.onResults(onHandResults);
+      new Camera(videoEl, {
+        onFrame: async () => { await hands.send({ image: videoEl }); },
+        width: 320, height: 240
+      }).start().catch(() => { handStatus.textContent = "MOUSE MODE ACTIVE"; });
+    } catch (e) {
+      handStatus.textContent = "MOUSE MODE ACTIVE";
+    }
+
+    /* =========================================================================
+       6. MOUSE CONTROLS
+       ========================================================================= */
+    let isMouseDown = false;
+    let mouseDragDist = 0;
+    let prevMouse = { x: 0, y: 0 };
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isHandActive) {
+        rawTarget.x = e.clientX;
+        rawTarget.y = e.clientY;
+      }
+      if (isMouseDown && appState !== 'city') {
+        const dx = e.clientX - prevMouse.x;
+        const dy = e.clientY - prevMouse.y;
+        mouseDragDist += Math.hypot(dx, dy);
+        rotVelocity.y = dx * 0.005;
+        rotVelocity.x = dy * 0.005;
+        earthGroup.rotation.y += rotVelocity.y;
+        earthGroup.rotation.x = Math.max(-1.2, Math.min(1.2, earthGroup.rotation.x + rotVelocity.x));
+        prevMouse = { x: e.clientX, y: e.clientY };
+      }
+    });
+
+    window.addEventListener('mousedown', (e) => {
+      if (e.target.closest('#target-card') || e.target.closest('#top-nav')) return;
+      isMouseDown = true;
+      mouseDragDist = 0;
+      prevMouse = { x: e.clientX, y: e.clientY };
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (isMouseDown && mouseDragDist < 6 && !e.target.closest('#target-card') && !e.target.closest('#top-nav')) {
+        if (snappedNode) {
+          if (snappedNode.type === 'country') enterCountry(snappedNode.item);
+          else if (snappedNode.type === 'city') enterCity(snappedNode.item);
+        }
+      }
+      isMouseDown = false;
+    });
+
+    window.addEventListener('wheel', (e) => {
+      camera.position.z = Math.min(Math.max(camera.position.z + e.deltaY * 0.008, 5.8), 22.0);
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    /* =========================================================================
+       7. RENDER LOOP: MAGNETIC PINS + FLOATING HOVER QUICK-INFO CARD
+       ========================================================================= */
+    const timeVal = document.getElementById('time-val');
+    const altVal = document.getElementById('alt-val');
+    const coordVal = document.getElementById('coord-val');
+    const qpImg = document.getElementById('qp-img');
+    const qpTag = document.getElementById('qp-tag');
+    const qpTitle = document.getElementById('qp-title');
+    const qpShort = document.getElementById('qp-short');
+    const qpHint = document.getElementById('qp-hint');
+
+    const clock = new THREE.Clock();
+    const tempVec = new THREE.Vector3();
+    const camDir = new THREE.Vector3();
+    let lastHoveredItem = null;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const elapsed = clock.getElapsedTime();
+
+      earthGroup.updateMatrixWorld(true);
+      const activeList = appState === 'globe' ? countryNodes : cityNodes;
+      let closestNode = null;
+      let minDist = 72;
+
+      activeList.forEach((node, i) => {
+        node.pin.getWorldPosition(tempVec);
+        const normal = tempVec.clone().normalize();
+        camDir.copy(camera.position).sub(tempVec).normalize();
+        const isFacing = normal.dot(camDir) > 0.22;
+
+        if (isFacing && node.pin.visible) {
+          tempVec.project(camera);
+          node.screenX = (tempVec.x * 0.5 + 0.5) * window.innerWidth;
+          node.screenY = (-(tempVec.y * 0.5) + 0.5) * window.innerHeight;
+
+          node.labelEl.style.transform = `translate3d(${node.screenX}px, ${node.screenY - 14}px, 0) translate(-50%, -100%)`;
+          node.labelEl.style.opacity = '1';
+
+          const d = Math.hypot(rawTarget.x - node.screenX, rawTarget.y - node.screenY);
+          if (d < minDist) {
+            minDist = d;
+            closestNode = node;
+          }
+        } else {
+          node.labelEl.style.opacity = '0';
+        }
+
+        const pulse = 1.0 + 0.22 * Math.sin(elapsed * 4.5 + i);
+        node.ringMesh.scale.set(pulse, pulse, 1);
+      });
+
+      snappedNode = closestNode;
+
+      // Magnetic Cursor Pull
+      let destX = rawTarget.x;
+      let destY = rawTarget.y;
+      if (snappedNode && !isFistGrab) {
+        destX = rawTarget.x * 0.45 + snappedNode.screenX * 0.55;
+        destY = rawTarget.y * 0.45 + snappedNode.screenY * 0.55;
+        virtualCursor.classList.add('snapped');
+      } else {
+        virtualCursor.classList.remove('snapped');
+      }
+
+      const moveSpeed = Math.hypot(destX - smoothCursor.x, destY - smoothCursor.y);
+      const alpha = Math.min(0.45, Math.max(0.15, moveSpeed / 140));
+      smoothCursor.x += (destX - smoothCursor.x) * alpha;
+      smoothCursor.y += (destY - smoothCursor.y) * alpha;
+      virtualCursor.style.transform = `translate3d(${smoothCursor.x}px, ${smoothCursor.y}px, 0)`;
+
+      // Update Label Hover & Floating Quick-Info Card
+      activeList.forEach(n => n.labelEl.classList.toggle('hovered', n === snappedNode));
+
+      if (snappedNode && !isFistGrab && !isTransitioning) {
+        const item = snappedNode.item;
+        if (lastHoveredItem !== item) {
+          lastHoveredItem = item;
+          qpImg.src = item.heroImg;
+          if (snappedNode.type === 'country') {
+            qpTag.textContent = `COUNTRY • ${item.cities.length} MAJOR CITIES`;
+            qpTitle.textContent = item.name;
+            qpShort.textContent = item.shortInfo;
+            qpHint.textContent = "PINCH / CLICK TO EXPLORE CITIES";
+          } else {
+            qpTag.textContent = `${activeCountry.name.toUpperCase()} • POP: ${item.pop}`;
+            qpTitle.textContent = item.name;
+            qpShort.textContent = item.shortInfo;
+            qpHint.textContent = "PINCH / CLICK FOR LANDMARKS & PHOTOS";
+          }
+        }
+        // Position floating tooltip neatly beside the pin without going off-screen
+        const cardX = Math.min(window.innerWidth - 290, Math.max(20, snappedNode.screenX + 28));
+        const cardY = Math.min(window.innerHeight - 240, Math.max(20, snappedNode.screenY - 90));
+        quickPreview.style.transform = `translate3d(${cardX}px, ${cardY}px, 0) scale(1)`;
+        quickPreview.classList.add('show');
+
+        // Dwell Ring Auto-Select
+        dwellProgress = Math.min(100, dwellProgress + (isHandActive ? 2.1 : 1.1));
+        if (dwellProgress >= 100 && isHandActive) {
+          dwellProgress = 0;
+          if (snappedNode.type === 'country') enterCountry(snappedNode.item);
+          else enterCity(snappedNode.item);
+        }
+      } else {
+        quickPreview.classList.remove('show');
+        lastHoveredItem = null;
+        dwellProgress = Math.max(0, dwellProgress - 4);
+      }
+
+      cursorRing.style.strokeDashoffset = 113 - (113 * dwellProgress) / 100;
+
+      // Highlight UI Buttons under Virtual Cursor
+      [btnTopBack, document.getElementById('btn-back-cities'), document.getElementById('btn-back-orbit')].forEach(btn => {
+        const r = btn.getBoundingClientRect();
+        const over = r.width > 0 && smoothCursor.x >= r.left && smoothCursor.x <= r.right &&
+                     smoothCursor.y >= r.top && smoothCursor.y <= r.bottom;
+        btn.classList.toggle('hot', over);
+      });
+
+      // Globe Rotation & Inertia
+      if (appState === 'globe' && !isMouseDown && !isFistGrab && !isTransitioning && !snappedNode) {
+        earthGroup.rotation.y += 0.0005 + rotVelocity.y;
+        earthGroup.rotation.x = Math.max(-1.2, Math.min(1.2, earthGroup.rotation.x + rotVelocity.x));
+      } else if (appState === 'country' && !isMouseDown && !isFistGrab && !isTransitioning) {
+        earthGroup.rotation.y += rotVelocity.y;
+        earthGroup.rotation.x = Math.max(-1.2, Math.min(1.2, earthGroup.rotation.x + rotVelocity.x));
+      }
+      rotVelocity.x *= 0.90;
+      rotVelocity.y *= 0.90;
+      cloudMesh.rotation.y += 0.00025;
+
+      // Telemetry
+      timeVal.textContent = new Date().toISOString().slice(11, 19);
+      altVal.textContent = `${Math.round(camera.position.z * 930).toLocaleString()} KM`;
+      const lonDeg = ((-earthGroup.rotation.y * 180 / Math.PI) % 360 + 360) % 360 - 180;
+      const latDeg = (earthGroup.rotation.x * 180 / Math.PI);
+      coordVal.textContent = `${Math.abs(latDeg).toFixed(1)}° ${latDeg >= 0 ? 'N' : 'S'}, ${Math.abs(lonDeg).toFixed(1)}° ${lonDeg >= 0 ? 'E' : 'W'}`;
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+  </script>
+</body>
+</html>
